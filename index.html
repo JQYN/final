@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+          integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.5.1/dist/leaflet.css"
+          integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
+          crossorigin=""/>
+    <style>
+        canvas {
+            width: 90vw;
+            height: 50rem;
+        }
+
+        h1 {
+            margin-top: 30vh;
+            margin-left: 20vw;
+        }
+
+        .full-page {
+            height: 99vh;
+        }
+
+        .map {
+            height: 100vh;
+        }
+
+        .inline {
+            display: inline;
+        }
+
+
+        .info {
+            padding: 6px 8px;
+            font: 14px/16px Arial, Helvetica, sans-serif;
+            background: white;
+            background: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+        }
+
+        .info h4 {
+            margin: 0 0 5px;
+            color: #777;
+        }
+
+        .legend {
+            line-height: 18px;
+            color: #555;
+        }
+
+        .legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.7;
+        }
+
+        .bar {
+            fill: steelblue;
+        }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="full-page">
+        <h1 class="display-3">What suburbs are commuter friendly and safe? </h1>
+    </div>
+
+    <div class="row">
+        <div class="col">
+            <div id="mapid" class="map"></div>
+        </div>
+        <div class="col">
+            <div id="map" class="map"></div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col">
+            <div id="index" class="map"></div>
+        </div>
+    </div>
+    <div class="row mt-4">
+        <div class="col">
+            <canvas id="canvas"></canvas>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
+        integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo"
+        crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"
+        integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1"
+        crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"
+        integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM"
+        crossorigin="anonymous"></script>
+<script src="https://unpkg.com/leaflet@1.5.1/dist/leaflet.js"
+        integrity="sha512-GffPMF3RvMeYyc1LWMHtK8EbPv0iNZ8/oTtHPx9/cc2ILxQ+u905qIwdpULaqDkyBKgOaB57QTMg7ztg8Jm2Og=="
+        crossorigin=""></script>
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.bundle.min.js"></script>
+<script type="module">
+    import {summarised} from './csvjson.js'
+    import {indexes} from "./liveIndex.js";
+
+    const mapboxUrl = 'https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}';
+    const token = 'pk.eyJ1IjoicWlhbnl1amluIiwiYSI6ImNqdzYzcWphMjF6cnE0OHFwdm5tdzBvd3UifQ.NiTRtQVY0L6uRiyY9ch2LA';
+    const attribution = 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>';
+
+    // load geo data with fetch API
+    fetch("geojson-vic.json")
+        .then(response => response.json())
+        .then(data => {
+
+            // set up maps code
+            // create three Map instance, set center at Clayton
+            const crimeMap = L.map('mapid').setView([-37.9245, 145.1201], 11);
+            const frequencyMap = L.map('map').setView([-37.9245, 145.1201], 11);
+            const liverableMap = L.map('index').setView([-37.9245, 145.1201], 11);
+
+
+            // fill Map with Mapbox tiles
+            L.tileLayer(mapboxUrl, {
+                attribution: attribution,
+                maxZoom: 18,
+                id: 'mapbox.light',
+
+                accessToken: token
+            }).addTo(crimeMap);
+
+            L.tileLayer(mapboxUrl, {
+                attribution: attribution,
+                maxZoom: 18,
+                id: 'mapbox.light',
+
+                accessToken: token
+            }).addTo(frequencyMap);
+
+            L.tileLayer(mapboxUrl, {
+                attribution: attribution,
+                maxZoom: 18,
+                id: 'mapbox.light',
+
+                accessToken: token
+            }).addTo(liverableMap);
+
+            let south_east = {
+                "type": "FeatureCollection",
+                "features": []
+            };
+
+            // prepare color set
+            let colors = ['#a50026', '#d73027', '#f46d43', '#fdae61', '#fee08b', '#ffffbf', '#d9ef8b', '#a6d96a', '#66bd63', '#1a9850', '#006837'].reverse();
+            let colors_blue = ['#eff3ff', '#bdd7e7', '#6baed6', '#3182bd', '#08519c'];
+            let colors_green_red = ['#d7191c', '#fdae61', '#ffffbf', '#a6d96a', '#1a9641'].reverse();
+
+            // get color utility
+            function getCrimeColor(d) {
+                let index = parseInt(d / 5000);
+                if (index > 10) return colors[10];
+                return colors[index]
+            }
+
+            function getFrequencyColor(d) {
+                let index = parseInt(d / 200);
+                if (index > 4) return colors_blue[4];
+                return colors_blue[index]
+            }
+
+            function getIndexColor(d) {
+                let index = parseInt(d / 20);
+                if (index > 4) return colors_green_red[4];
+                return colors_green_red[index]
+            }
+
+            // fill custom attribute to geo data
+            data.features.forEach(item => {
+                let suburb = item.properties.vic_loca_2;
+
+                summarised.forEach(record => {
+                    if (record.Suburb === suburb) {
+                        item.properties.train_count = record.train_count;
+                        item.properties.total_crime = record.total_crime;
+                        item.properties.live_index = (record.total_crime / record.train_count).toFixed(2);
+                        // console.log(item.live_index);
+                        south_east.features.push(item)
+
+                    }
+                })
+
+
+            });
+
+            // set up info box on crime map
+            const crime_info = L.control();
+            crime_info.onAdd = function (map) {
+                this._div = L.DomUtil.create('div', 'info'); // create a div with a class "info"
+                this.update();
+                return this._div;
+            };
+
+            // method that we will use to update the control based on feature properties passed
+            crime_info.update = function (props) {
+                this._div.innerHTML = '<h4>Which suburb in South-East Melbourne <br/>in 2018 has highest crime rate?</h4>' +
+                    '<p><small>Greener is safe, red is dangerous</small></p>' + (props ?
+                        '<b>' + props.vic_loca_2 + '</b><br/>' + props.total_crime + ' in 2018'
+                        : 'Hover over a suburb');
+            };
+            crime_info.addTo(crimeMap);
+
+            // set up info box on train frequency map
+            const frequency_info = L.control();
+            frequency_info.onAdd = function (map) {
+                this._div = L.DomUtil.create('div', 'info'); // create a div with a class "info"
+                this.update();
+                return this._div;
+            };
+            frequency_info.update = function (props) {
+                this._div.innerHTML = '<h4>Which suburb in South-East Melbourne <br/>has most train frequency?</h4>' +
+                    '<p><small>Deeper color means more trains</small></p>' + (props ?
+                        '<b>' + props.vic_loca_2 + '</b><br/>' + props.train_count
+                        : 'Hover over a suburb');
+            };
+            frequency_info.addTo(frequencyMap);
+
+            // set up info box on unlivable index map
+            const index_info = L.control();
+            index_info.onAdd = function (map) {
+                this._div = L.DomUtil.create('div', 'info'); // create a div with a class "info"
+                this.update();
+                return this._div;
+            };
+            index_info.update = function (props) {
+                this._div.innerHTML = '<h4>Which suburb in South-East Melbourne <br/>owns highest unlivable index?</h4>' +
+                    '<p><small>Deeper color means more trains</small></p>' + (props ?
+                        '<b>' + props.vic_loca_2 + '</b><br/>' + props.live_index
+                        : 'Hover over a suburb');
+            };
+            index_info.addTo(liverableMap);
+
+            // focus utility function for set up onFocus event
+            function focus(e) {
+                const layer = e.target;
+                layer.setStyle({
+                    weight: 5,
+                    color: '#666',
+                    dashArray: '',
+                    fillOpacity: 0.7
+                });
+
+                if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+                    layer.bringToFront();
+                }
+                return layer;
+            }
+
+            // set up crime data overlay on crime map
+            const crimeOverlay = L.geoJSON(south_east, {
+                style: (feature) => {
+                    return {
+                        fillColor: getCrimeColor(feature.properties.total_crime),
+                        weight: 2,
+                        opacity: 1,
+                        color: 'white',
+                        dashArray: '3',
+                        fillOpacity: 0.7
+                    }
+                },
+                onEachFeature: (feature, layer) => {
+                    layer.on({
+                        mouseover: (e) => {
+                            const layer = focus(e);
+
+                            crime_info.update(layer.feature.properties);
+                        },
+                        mouseout: (e) => {
+                            crimeOverlay.resetStyle(e.target);
+                            crime_info.update();
+                        },
+                        click: (e) => {
+                            crimeMap.fitBounds(e.target.getBounds());
+                            frequencyMap.fitBounds(e.target.getBounds());
+                            liverableMap.fitBounds(e.target.getBounds());
+                        }
+                    });
+                }
+            }).addTo(crimeMap);
+
+            // set up frequency data overlay on train frequency map
+            const frequencyOverlay = L.geoJSON(south_east, {
+                style: (feature) => {
+                    return {
+                        fillColor: getFrequencyColor(feature.properties.train_count),
+                        weight: 2,
+                        opacity: 1,
+                        color: 'white',
+                        dashArray: '3',
+                        fillOpacity: 0.7
+                    }
+                },
+                onEachFeature: (feature, layer) => {
+                    layer.on({
+                        mouseover: (e) => {
+                            const layer = focus(e);
+
+                            frequency_info.update(layer.feature.properties);
+                        },
+                        mouseout: (e) => {
+                            frequencyOverlay.resetStyle(e.target);
+                            frequency_info.update();
+                        },
+                        click: (e) => {
+                            crimeMap.fitBounds(e.target.getBounds());
+                            frequencyMap.fitBounds(e.target.getBounds());
+                            liverableMap.fitBounds(e.target.getBounds());
+                        }
+                    });
+                }
+            }).addTo(frequencyMap);
+
+
+            // set up index data overlay on index map
+
+            const indexOverlay = L.geoJSON(south_east, {
+                style: (feature) => {
+                    return {
+                        fillColor: getIndexColor(feature.properties.live_index),
+                        weight: 2,
+                        opacity: 1,
+                        color: 'white',
+                        dashArray: '3',
+                        fillOpacity: 0.7
+                    }
+                },
+                onEachFeature: (feature, layer) => {
+                    layer.on({
+                        mouseover: (e) => {
+                            const layer = focus(e);
+
+                            index_info.update(layer.feature.properties);
+                        },
+                        mouseout: (e) => {
+                            indexOverlay.resetStyle(e.target);
+                            index_info.update();
+                        },
+                        click: (e) => {
+                            crimeMap.fitBounds(e.target.getBounds());
+                            frequencyMap.fitBounds(e.target.getBounds());
+                            liverableMap.fitBounds(e.target.getBounds());
+                        }
+                    });
+                }
+            }).addTo(liverableMap);
+
+
+        });
+
+    // below are initial bar chart code
+    // set up label and data array
+    let labels_index = [];
+    let data_index = [];
+    indexes.forEach(item => {
+        data_index.push(item.y);
+        labels_index.push(item.x)
+    });
+
+    // reference to canvas
+    const ctx = document.getElementById('canvas').getContext('2d');
+
+    // plot bar chart
+    const myBarChart = new Chart(ctx, {
+        type: 'horizontalBar',  // set type
+        data: {
+            labels: labels_index.reverse(), // label array goes here
+            datasets: [{
+                label: 'unlivable index',
+                data: data_index.reverse() // data array goes here
+            }],
+
+        },
+
+        // stander options set up from official doc, leave as-is
+        options: {
+            elements: {
+                rectangle: {
+                    borderWidth: 2,
+                }
+            },
+            responsive: false,
+            scales: {
+                xAxes: [{
+                    ticks: {
+                        maxRotation: 90,
+                        minRotation: 80
+                    }
+                }],
+                yAxes: [{
+                    ticks: {
+                        beginAtZero: true
+                    }
+                }]
+            }
+        }
+    });
+</script>
+</body>
+</html>
